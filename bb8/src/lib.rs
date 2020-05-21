@@ -639,26 +639,21 @@ impl<M: ManageConnection> Pool<M> {
     }
 
     /// Run a closure with a `Connection`.
-    pub async fn run<'a, T, E, U, F>(&self, f: F) -> Result<T, RunError<E>>
+    pub async fn run<T, E, U, F>(&self, f: F) -> Result<T, RunError<E>>
     where
-        F: FnOnce(M::Connection) -> U + Send + 'a,
-        U: Future<Output = Result<(T, M::Connection), (E, M::Connection)>> + Send + 'a,
-        E: From<M::Error> + Send + 'a,
-        T: Send + 'a,
+        F: for<'a> FnOnce(&'a mut M::Connection) -> U + Send,
+        U: Future<Output = Result<T, E>> + Send,
+        E: From<M::Error> + Send,
+        T: Send,
     {
-        let conn = match self.get_conn::<E>().await {
+        let mut conn = match self.get_conn::<E>().await {
             Ok(conn) => conn,
             Err(e) => return Err(e),
         };
 
         let birth = conn.birth;
-        let (r, conn): (Result<_, E>, _) = match f(conn.conn).await {
-            Ok((t, conn)) => (Ok(t), conn),
-            Err((e, conn)) => (Err(e), conn),
-        };
-
-        self.put_back(birth, conn).await;
-
+        let r = f(&mut conn.conn).await;
+        self.put_back(birth, conn.conn).await;
         r.map_err(RunError::User)
     }
 

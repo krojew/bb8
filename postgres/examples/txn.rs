@@ -21,7 +21,7 @@ async fn main() {
     let _ = pool
         .run(|connection| async {
             if let Err(e) = connection.simple_query("BEGIN").await {
-                return Err((e, connection));
+                return Err(e);
             }
 
             let err = match connection.prepare("SELECT 1").await {
@@ -42,8 +42,8 @@ async fn main() {
 
             let _ = connection.simple_query(finalize_query).await;
             match err {
-                Some(e) => Err((e, connection)),
-                None => Ok(((), connection)),
+                Some(e) => Err(e),
+                None => Ok(()),
             }
         })
         .await
